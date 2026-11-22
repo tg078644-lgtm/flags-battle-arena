@@ -24,7 +24,7 @@ jobs:
 
       - name: Install & Build Web App
         run: |
-          npm install
+          npm install --legacy-peer-deps
           npm run build -- --base=./
 
       - name: Upload GitHub Pages Artifact
@@ -34,7 +34,7 @@ jobs:
 
       - name: Build Android APK via Capacitor
         run: |
-          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          npm install --legacy-peer-deps @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
           npx cap init "Flags Battle" "com.tg078644.flagsbattle" --web-dir=dist
           npx cap add android
           npx cap sync android
