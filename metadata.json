@@ -1,0 +1,6 @@
+{
+  "name": "Country Flags Battle Arena",
+  "description": "A mobile-friendly, dark-mode 2D physics battle royale where 195+ country flags bounce inside a glowing rotating neon ring until one champion remains.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
