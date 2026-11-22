@@ -35,7 +35,7 @@ jobs:
       - name: Build Android APK via Capacitor
         run: |
           npm install --legacy-peer-deps @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
-          npx cap init "Flags Battle" "com.tg078644.flagsbattle" --web-dir=dist
+          echo '{"appId":"com.tg078644.flagsbattle","appName":"Flags Battle","webDir":"dist"}' > capacitor.config.json
           npx cap add android
           npx cap sync android
           cd android
