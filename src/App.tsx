@@ -232,20 +232,50 @@ export default function App() {
     };
   }, []);
 
+  // Batched HUD refs so React re-renders at most ~4.5 times/sec (every 220ms) instead of every physics frame
+  const pendingEliminationsRef = useRef<EliminatedEntry[]>([]);
+  const pendingSnapshotRef = useRef<ArenaSnapshot | null>(null);
+  const snapshotDirtyRef = useRef<boolean>(false);
+
+  const flushPendingHud = useCallback(() => {
+    const batch = pendingEliminationsRef.current;
+    if (batch.length > 0) {
+      pendingEliminationsRef.current = [];
+      setEliminated((prev) => {
+        const next = [...batch, ...prev];
+        return next.length > 60 ? next.slice(0, 60) : next;
+      });
+    }
+    if (snapshotDirtyRef.current && pendingSnapshotRef.current) {
+      snapshotDirtyRef.current = false;
+      const latest = pendingSnapshotRef.current;
+      setSnapshot(latest);
+    }
+  }, []);
+
+  useEffect(() => {
+    const flushTimer = window.setInterval(flushPendingHud, 220);
+    return () => window.clearInterval(flushTimer);
+  }, [flushPendingHud]);
+
   const startFreshRound = useCallback((flagsOverride?: CountryFlag[]) => {
     const pool = flagsOverride ?? activeFlagsRef.current;
     voiceAnnouncer.stopAll();
-    setWinner(null);
-    setCountdown(null);
-    setEliminated([]);
-    setIsPaused(false);
-    setSnapshot({
+    pendingEliminationsRef.current = [];
+    snapshotDirtyRef.current = false;
+    const freshSnap: ArenaSnapshot = {
       aliveCount: pool.length,
       totalCount: pool.length,
       ringScale: 1,
       chaosBoostActive: false,
       elapsedSeconds: 0,
-    });
+    };
+    pendingSnapshotRef.current = freshSnap;
+    setWinner(null);
+    setCountdown(null);
+    setEliminated([]);
+    setIsPaused(false);
+    setSnapshot(freshSnap);
     if (engineRef.current) {
       // Hold flags stationary inside the ring during the 3-2-1 countdown
       engineRef.current.setPaused(true);
@@ -262,14 +292,27 @@ export default function App() {
 
     const engine = new ArenaEngine(canvas, {
       onEliminate: (flag, rank, aliveCount) => {
-        setEliminated((prev) => {
-          const next = [{ flag, rank, timestamp: Date.now() }, ...prev];
-          return next.length > 60 ? next.slice(0, 60) : next;
+        // Queue into mutable ref; React flushes at most ~4.5 times/sec
+        pendingEliminationsRef.current.unshift({
+          flag,
+          rank,
+          timestamp: Date.now(),
         });
-        setSnapshot((prev) => ({ ...prev, aliveCount }));
+        if (pendingEliminationsRef.current.length > 60) {
+          pendingEliminationsRef.current.length = 60;
+        }
+        if (pendingSnapshotRef.current) {
+          pendingSnapshotRef.current = {
+            ...pendingSnapshotRef.current,
+            aliveCount,
+          };
+          snapshotDirtyRef.current = true;
+        }
         voiceAnnouncer.announceElimination(flag.name, aliveCount);
       },
       onVictory: (winningFlag) => {
+        // Flush any final queued eliminations & snapshot immediately on victory
+        flushPendingHud();
         setWinner(winningFlag);
         setTotalRounds((r) => r + 1);
         voiceAnnouncer.announceVictory(winningFlag.name);
@@ -305,7 +348,8 @@ export default function App() {
         }
       },
       onSnapshot: (snap) => {
-        setSnapshot(snap);
+        pendingSnapshotRef.current = snap;
+        snapshotDirtyRef.current = true;
       },
     });
 
@@ -326,7 +370,7 @@ export default function App() {
       engine.destroy();
       engineRef.current = null;
     };
-  }, []);
+  }, [flushPendingHud]);
 
   // 3, 2, 1 Animated Round Start Countdown (releases flags right as "One" finishes)
   useEffect(() => {
